@@ -379,6 +379,11 @@ class _RDIReader():
         for dat in datl:
             self.finalize(dat)
             if 'vel_bt' in dat['data_vars']:
+                # replace vel_bt == -32.768 with NaN
+                dat['data_vars']['vel_bt'][dat['data_vars']['vel_bt'] == -32.768] = np.NaN
+                # NaN the dist_bt if any of the vel_bt is NaN
+                dat['data_vars']['dist_bt'][np.isnan(dat['data_vars']['vel_bt'])] = np.NaN
+                # append the vel_bt to the rotate_vars
                 dat['attrs']['rotate_vars'].append('vel_bt')
 
         dat = self.outd
