@@ -122,6 +122,9 @@ def _beam2inst(dat, reverse=False, force=False):
 
     rotmat = dat['beam2inst_orientmat']
 
+    # implement three beam solution here
+    dat = calc_3_beam_solution(dat)
+
     if isinstance(force, (list, set, tuple)):
         # You can force a distinct set of variables to be rotated by
         # specifying it here.
@@ -336,3 +339,42 @@ def calc_tilt(pitch, roll):
     )
 
     return np.rad2deg(tilt)
+
+
+def calc_3_beam_solution(adcpo):
+    # implement 3-beam solution
+    # 'beamdat' is your 2D array and 'T' is your transformation matrix
+    beamdat = adcpo['vel'].values
+    T = adcpo.beam2inst_orientmat.values
+
+    btim = beamdat.copy()
+    # Find the indices where exactly three beams have finite values
+    # need the sum of each four beams at each depth cell for every time stamp
+
+    for i in range(beamdat.shape[2]):
+        three_beam = np.sum(np.isfinite(beamdat[:, :, i]), axis=0) == 3
+        if np.any(three_beam):
+            # Select depth cells with exactly 3 "good" beams
+            data = beamdat[:, three_beam.astype(bool), i]
+
+            # Find which of the 4 beams is bad
+            mask = np.isnan(data)
+
+            # Force "bad beam" to zero instead of NaN. Now the error velocity is 0.
+            data[mask] = 0
+
+            # Create a matrix with rows representing the depth cells with 3 beams, each row represents the error velocity transformation
+            tran = np.tile(T[3, :].reshape(4,1), (1, np.sum(three_beam)))
+
+            # Multiply the data with the error velocity transformation matrix
+            err = np.nansum(data * tran, axis=0)
+
+            # Assign the bad beam to its value dependent on other 3 beams
+            errmat = -err / tran
+            data[mask] = errmat[mask]
+
+            btim[:, three_beam.astype(bool), i] = data
+
+    adcpo['vel'].values = btim
+
+    return adcpo
